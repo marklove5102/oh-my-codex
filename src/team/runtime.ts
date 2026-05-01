@@ -3284,6 +3284,22 @@ export async function reassignTask(
   await assignTask(teamName, toWorker, taskId, cwd);
 }
 
+function resolveCommitHygieneArtifactTeamNames(config: TeamConfig, internalTeamName: string): string[] {
+  const names: string[] = [];
+  for (const value of [config.requested_name, config.display_name, internalTeamName]) {
+    if (typeof value !== 'string' || value.trim() === '') continue;
+    try {
+      const sanitized = sanitizeTeamName(value);
+      if (!names.includes(sanitized)) names.push(sanitized);
+    } catch {
+      // Persisted display/request names are best-effort aliases. If an older
+      // state file contains an invalid value, fall back to the internal name.
+    }
+  }
+  if (!names.includes(internalTeamName)) names.push(internalTeamName);
+  return names;
+}
+
 /**
  * Graceful shutdown: send shutdown inbox to all workers, wait, force kill, cleanup.
  */
@@ -3577,14 +3593,22 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
   }
 
   const artifactCwd = resolveTeamCommitHygieneArtifactCwd(config, cwd);
-  const ledger = await appendTeamCommitHygieneEntries(sanitized, commitHygieneEntries, artifactCwd)
   const taskView = await listTasks(sanitized, cwd).catch(() => [])
-  const commitHygieneContext = buildTeamCommitHygieneContext({
-    teamName: sanitized,
-    tasks: taskView,
-    ledger,
-  })
-  const commitHygieneArtifacts = await writeTeamCommitHygieneContext(sanitized, commitHygieneContext, artifactCwd)
+  const internalLedger = await appendTeamCommitHygieneEntries(sanitized, commitHygieneEntries, artifactCwd)
+  const commitHygieneArtifactTeamNames = resolveCommitHygieneArtifactTeamNames(config, sanitized);
+  let commitHygieneArtifacts: TeamCommitHygieneArtifactPaths | null = null;
+  for (const artifactTeamName of commitHygieneArtifactTeamNames) {
+    const ledger = artifactTeamName === sanitized
+      ? internalLedger
+      : await appendTeamCommitHygieneEntries(artifactTeamName, internalLedger.entries, artifactCwd)
+    const commitHygieneContext = buildTeamCommitHygieneContext({
+      teamName: artifactTeamName,
+      tasks: taskView,
+      ledger,
+    })
+    const writtenArtifacts = await writeTeamCommitHygieneContext(artifactTeamName, commitHygieneContext, artifactCwd)
+    commitHygieneArtifacts ??= writtenArtifacts
+  }
 
   // 5. Remove worker worktree-root instructions and team-scoped fallback instructions.
   for (const worker of config.workers) {
