@@ -103,22 +103,44 @@ function candidateFromDir(root: string, teamName: string): TeamLookupCandidate |
   };
 }
 
-export function listTeamLookupCandidates(cwd: string): TeamLookupCandidate[] {
-  const root = join(resolve(cwd), '.omx', 'state', 'team');
-  if (!existsSync(root)) return [];
-  return readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => candidateFromDir(root, entry.name))
-    .filter((entry): entry is TeamLookupCandidate => Boolean(entry));
+function teamLookupRoots(cwd: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  const roots: string[] = [];
+  const addStateRoot = (stateRoot: string): void => {
+    const trimmed = stateRoot.trim();
+    if (!trimmed) return;
+    const root = join(resolve(cwd, trimmed), 'team');
+    if (!roots.includes(root)) roots.push(root);
+  };
+
+  const explicit = typeof env.OMX_TEAM_STATE_ROOT === 'string' ? env.OMX_TEAM_STATE_ROOT : '';
+  addStateRoot(explicit);
+  addStateRoot(join(resolve(cwd), '.omx', 'state'));
+  return roots;
+}
+
+export function listTeamLookupCandidates(cwd: string, env: NodeJS.ProcessEnv = process.env): TeamLookupCandidate[] {
+  const byTeamName = new Map<string, TeamLookupCandidate>();
+  for (const root of teamLookupRoots(cwd, env)) {
+    if (!existsSync(root)) continue;
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const candidate = candidateFromDir(root, entry.name);
+      if (candidate && !byTeamName.has(candidate.teamName)) {
+        byTeamName.set(candidate.teamName, candidate);
+      }
+    }
+  }
+  return [...byTeamName.values()];
 }
 
 export function resolveTeamNameForCurrentContext(inputName: string, cwd: string, env: NodeJS.ProcessEnv = process.env): string {
   if (/[^a-zA-Z0-9-]/.test(inputName.trim())) return inputName.trim();
   const input = sanitizeBase(inputName);
-  const root = join(resolve(cwd), '.omx', 'state', 'team');
-  if (existsSync(join(root, input))) return input;
+  for (const root of teamLookupRoots(cwd, env)) {
+    if (existsSync(join(root, input))) return input;
+  }
 
-  const candidates = listTeamLookupCandidates(cwd).filter((candidate) => {
+  const candidates = listTeamLookupCandidates(cwd, env).filter((candidate) => {
     return sanitizeBase(candidate.displayName) === input || sanitizeBase(candidate.requestedName) === input;
   });
   if (candidates.length === 0) return input;

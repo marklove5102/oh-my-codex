@@ -30,6 +30,27 @@ describe('team identity', () => {
     assert.equal(scope.paneId, '%42');
   });
 
+  it('resolves display names from OMX_TEAM_STATE_ROOT when cwd has no local team state', async () => {
+    const leaderCwd = await mkdtemp(join(tmpdir(), 'omx-team-identity-leader-'));
+    const workerCwd = await mkdtemp(join(tmpdir(), 'omx-team-identity-worker-'));
+    try {
+      await initTeamState('shared-demo-aaaaaaaa', 'task', 'executor', 1, leaderCwd, undefined, { OMX_SESSION_ID: 'session-shared' }, {
+        display_name: 'shared-demo', requested_name: 'shared-demo', identity_source: 'env-session',
+      });
+
+      assert.equal(
+        resolveTeamNameForCurrentContext('shared-demo', workerCwd, {
+          OMX_SESSION_ID: 'session-shared',
+          OMX_TEAM_STATE_ROOT: join(leaderCwd, '.omx', 'state'),
+        }),
+        'shared-demo-aaaaaaaa',
+      );
+    } finally {
+      await rm(leaderCwd, { recursive: true, force: true });
+      await rm(workerCwd, { recursive: true, force: true });
+    }
+  });
+
   it('resolves display names to the current session candidate and fails closed on ambiguity', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omx-team-identity-'));
     try {

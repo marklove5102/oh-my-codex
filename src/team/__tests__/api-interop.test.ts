@@ -854,6 +854,54 @@ describe('executeTeamApiOperation: list-tasks', () => {
     }
   });
 
+
+  it('resolves display team names from OMX_TEAM_STATE_ROOT when API calls run outside the leader cwd', async () => {
+    const { cwd: leaderCwd, cleanup } = await setupDisplayTeam('api-root-display-11111111', 'api-root-display', 'session-api-root-display');
+    const workerCwd = await mkdtemp(join(tmpdir(), 'omx-interop-api-root-worker-'));
+    try {
+      process.env.OMX_TEAM_STATE_ROOT = join(leaderCwd, '.omx', 'state');
+      await createTask('api-root-display-11111111', { subject: 'From shared root', description: 'D', status: 'pending' }, leaderCwd);
+      const event = await appendTeamEvent('api-root-display-11111111', {
+        type: 'task_completed',
+        worker: 'worker-1',
+        task_id: '1',
+      }, leaderCwd);
+      await writeMonitorSnapshot('api-root-display-11111111', {
+        taskStatusById: { '1': 'pending' },
+        workerAliveByName: { 'worker-1': true, 'worker-2': true },
+        workerStateByName: { 'worker-1': 'idle', 'worker-2': 'working' },
+        workerTurnCountByName: { 'worker-1': 1, 'worker-2': 1 },
+        workerTaskIdByName: { 'worker-1': '1', 'worker-2': '1' },
+        mailboxNotifiedByMessageId: {},
+        completedEventTaskIds: {},
+      }, leaderCwd);
+
+      const listResult = await executeTeamApiOperation('list-tasks', { team_name: 'api-root-display' }, workerCwd);
+      assert.equal(listResult.ok, true);
+      if (!listResult.ok) throw new Error('expected list-tasks to succeed');
+      assert.equal(listResult.data.count, 1);
+      assert.equal((listResult.data.tasks as Array<{ subject?: string }>)[0]?.subject, 'From shared root');
+
+      const eventsResult = await executeTeamApiOperation('read-events', {
+        team_name: 'api-root-display',
+        type: 'task_completed',
+      }, workerCwd);
+      assert.equal(eventsResult.ok, true);
+      if (!eventsResult.ok) throw new Error('expected read-events to succeed');
+      assert.equal(eventsResult.data.count, 1);
+      assert.equal((eventsResult.data.events as Array<{ event_id?: string }>)[0]?.event_id, event.event_id);
+
+      const idleResult = await executeTeamApiOperation('read-idle-state', { team_name: 'api-root-display' }, workerCwd);
+      assert.equal(idleResult.ok, true);
+      if (!idleResult.ok) throw new Error('expected read-idle-state to succeed');
+      assert.equal(idleResult.data.team_name, 'api-root-display-11111111');
+      assert.deepEqual(idleResult.data.idle_workers, ['worker-1']);
+    } finally {
+      await rm(workerCwd, { recursive: true, force: true });
+      await cleanup();
+    }
+  });
+
   it('prefers OMX_TEAM_STATE_ROOT over manifest metadata when resolving the team working directory', async () => {
     const teamName = 'list-tsk-env-root';
     const cwdA = await mkdtemp(join(tmpdir(), 'omx-interop-env-a-'));
