@@ -966,16 +966,16 @@ export async function executeTeamApiOperation(
         return { ok: true, operation, data: { event } };
       }
       case 'read-events': {
-        const teamName = String(args.team_name || '').trim();
+        const teamName = String(opArgs.team_name || '').trim();
         if (!teamName) {
           return { ok: false, operation, error: { code: 'invalid_input', message: 'team_name is required' } };
         }
-        const wakeableOnly = parseOptionalBoolean(args.wakeable_only, 'wakeable_only');
-        const eventType = parseOptionalEventType(args.type);
-        const worker = typeof args.worker === 'string' ? args.worker.trim() : '';
-        const taskId = typeof args.task_id === 'string' ? args.task_id.trim() : '';
+        const wakeableOnly = parseOptionalBoolean(opArgs.wakeable_only, 'wakeable_only');
+        const eventType = parseOptionalEventType(opArgs.type);
+        const worker = typeof opArgs.worker === 'string' ? opArgs.worker.trim() : '';
+        const taskId = typeof opArgs.task_id === 'string' ? opArgs.task_id.trim() : '';
         const events = await readTeamEvents(teamName, cwd, {
-          afterEventId: typeof args.after_event_id === 'string' ? args.after_event_id.trim() || undefined : undefined,
+          afterEventId: typeof opArgs.after_event_id === 'string' ? opArgs.after_event_id.trim() || undefined : undefined,
           wakeableOnly: wakeableOnly ?? false,
           type: eventType ?? undefined,
           worker: worker || undefined,
@@ -986,24 +986,24 @@ export async function executeTeamApiOperation(
           operation,
           data: {
             count: events.length,
-            cursor: events.at(-1)?.event_id ?? (typeof args.after_event_id === 'string' ? args.after_event_id.trim() : ''),
+            cursor: events.at(-1)?.event_id ?? (typeof opArgs.after_event_id === 'string' ? opArgs.after_event_id.trim() : ''),
             events,
           },
         };
       }
       case 'await-event': {
-        const teamName = String(args.team_name || '').trim();
+        const teamName = String(opArgs.team_name || '').trim();
         if (!teamName) {
           return { ok: false, operation, error: { code: 'invalid_input', message: 'team_name is required' } };
         }
-        const timeoutMs = parseOptionalNonNegativeInteger(args.timeout_ms, 'timeout_ms') ?? 30_000;
-        const pollMs = parseOptionalNonNegativeInteger(args.poll_ms, 'poll_ms');
-        const wakeableOnly = parseOptionalBoolean(args.wakeable_only, 'wakeable_only');
-        const eventType = parseOptionalEventType(args.type);
-        const worker = typeof args.worker === 'string' ? args.worker.trim() : '';
-        const taskId = typeof args.task_id === 'string' ? args.task_id.trim() : '';
+        const timeoutMs = parseOptionalNonNegativeInteger(opArgs.timeout_ms, 'timeout_ms') ?? 30_000;
+        const pollMs = parseOptionalNonNegativeInteger(opArgs.poll_ms, 'poll_ms');
+        const wakeableOnly = parseOptionalBoolean(opArgs.wakeable_only, 'wakeable_only');
+        const eventType = parseOptionalEventType(opArgs.type);
+        const worker = typeof opArgs.worker === 'string' ? opArgs.worker.trim() : '';
+        const taskId = typeof opArgs.task_id === 'string' ? opArgs.task_id.trim() : '';
         const result = await waitForTeamEvent(teamName, cwd, {
-          afterEventId: typeof args.after_event_id === 'string' ? args.after_event_id.trim() || undefined : undefined,
+          afterEventId: typeof opArgs.after_event_id === 'string' ? opArgs.after_event_id.trim() || undefined : undefined,
           timeoutMs,
           pollMs: pollMs ?? undefined,
           wakeableOnly: wakeableOnly ?? false,
@@ -1022,7 +1022,7 @@ export async function executeTeamApiOperation(
         };
       }
       case 'read-idle-state': {
-        const teamName = String(args.team_name || '').trim();
+        const teamName = String(opArgs.team_name || '').trim();
         if (!teamName) {
           return { ok: false, operation, error: { code: 'invalid_input', message: 'team_name is required' } };
         }
@@ -1042,7 +1042,7 @@ export async function executeTeamApiOperation(
         };
       }
       case 'read-stall-state': {
-        const teamName = String(args.team_name || '').trim();
+        const teamName = String(opArgs.team_name || '').trim();
         if (!teamName) {
           return { ok: false, operation, error: { code: 'invalid_input', message: 'team_name is required' } };
         }
@@ -1105,7 +1105,7 @@ export async function executeTeamApiOperation(
         return { ok: true, operation, data: { team_name: teamName, cleanup_mode: 'shutdown' } };
       }
       case 'orphan-cleanup': {
-        const teamName = String(args.team_name || '').trim();
+        const teamName = String(opArgs.team_name || '').trim();
         if (!teamName) return { ok: false, operation, error: { code: 'invalid_input', message: 'team_name is required' } };
         await teamCleanup(teamName, cwd);
         return { ok: true, operation, data: { team_name: teamName, cleanup_mode: 'orphan_cleanup' } };
